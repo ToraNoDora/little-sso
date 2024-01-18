@@ -1,0 +1,143 @@
+version: '3'
+
+vars:
+  APP_PATH: sso
+  APP_PORT: 44044
+
+  MAIN_PACKAGE_PATH: ./cmd/sso/main.go
+
+  SECRET_PATH: ./sso/.env
+
+  BINARY_NAME: little_sso
+  OUTPUT_PATH: ./tmp/bin
+
+  TEST_PATH: ./tests
+
+  STORE_DB: sso_dev
+  STORE_HOST: 127.0.0.1
+  STORE_PORT: 5432
+  STORE_USER: postgres
+  STORE_PSW: chinchi
+
+  REDIS_PORT: 6379
+
+  MIRGATIONS_PATH: ./migrations/schema
+
+  DOCKER_FILE: ./Dockerfile
+  DOCKER_IMAGE_NAME: little_sso
+  DOCKER_REGISTRY: docker-registry-test
+  DOCKER_REPO: little-sso
+
+  PSQL_NAME: psql_sso_dev
+  REDIS_NAME: redis_sso_dev
+
+tasks:
+  init:
+    deps: [run.psql, migrate.up, run.redis]
+    dir: "{{.APP_PATH}}"
+    cmds:
+      - go mod download
+    silent: true
+
+  tidy:
+    dir: "{{.APP_PATH}}"
+    cmds:
+      - go fmt ./...
+      - go mod tidy -v
+    silent: true
+
+  test:
+    dir: "{{.APP_PATH}}"
+    deps: [tidy]
+    cmds:
+      - go test {{.TEST_PATH}}
+    silent: true
+
+  test.detail:
+    dir: "{{.APP_PATH}}"
+    deps: [tidy]
+    cmds:
+      - go test -v {{.TEST_PATH}}
+    silent: true
+
+  test.cover:
+    dir: "{{.APP_PATH}}"
+    deps: [tidy]
+    cmds:
+      - go tool cover -func=coverage.out
+    silent: true
+
+  run.psql:
+    cmds:
+      - |
+        docker run \
+          --name {{.PSQL_NAME}} \
+          -p {{.STORE_PORT}}:{{.STORE_PORT}} \
+          -e POSTGRES_PASSWORD={{.STORE_PSW}} \
+          -e POSTGRES_DB={{.STORE_DB}} \
+          -d postgres
+      - echo "success"
+    silent: true
+
+  run.redis:
+    cmds:
+      - docker run --name {{.REDIS_NAME}} -d redis
+      - docker exec -it {{.REDIS_NAME}} redis-cli ping
+      - echo "success"
+    silent: true
+
+  install.migrate:
+    cmds:
+      - go install github.com/golang-migrate/migrate/cli@latest
+    silent: true
+
+  migrate.up:
+    cmds:
+      - migrate -path {{.MIRGATIONS_PATH}} -database 'postgres://{{.STORE_USER}}:{{.STORE_PSW}}@{{.STORE_HOST}}:{{.STORE_PORT}}/{{.STORE_DB}}?sslmode=disable' up
+    silent: true
+
+  migrate.down:
+    cmds:
+      - migrate -path {{.MIRGATIONS_PATH}} -database 'postgres://{{.STORE_USER}}:{{.STORE_PSW}}@{{.STORE_HOST}}:{{.STORE_PORT}}/{{.STORE_DB}}?sslmode=disable' down
+    silent: true
+
+  build:
+    dir: "{{.APP_PATH}}"
+    deps: [tidy]
+    cmds:
+      - go build -o={{.OUTPUT_PATH}}/{{.BINARY_NAME}} {{.MAIN_PACKAGE_PATH}}
+    silent: true
+
+  run:
+    dir: "{{.APP_PATH}}"
+    deps: [build]
+    cmds:
+      - "{{.OUTPUT_PATH}}/{{.BINARY_NAME}}"
+    silent: true
+
+  run.live:
+    dir: "{{.APP_PATH}}"
+    cmds:
+      - go run {{.MAIN_PACKAGE_PATH}}
+    silent: true
+
+  docker.build:
+    deps: [tidy]
+    cmds:
+      - docker build --no-cache -f {{.DOCKER_FILE}} -t {{.DOCKER_REGISTRY}}/{{.DOCKER_REPO}}:{{.tag}} .
+    silent: true
+
+  docker.run:
+    cmds:
+      - |
+        docker run -p {{.APP_PORT}}:{{.APP_PORT}} \
+          --env-file {{.SECRET_PATH}} \
+          -d --name {{.DOCKER_IMAGE_NAME}} \
+          --rm -ti {{.DOCKER_REGISTRY}}/{{.DOCKER_REPO}}:{{.tag}}
+    silent: true
+
+  docker.push:
+    cmds:
+      - docker push {{.DOCKER_REGISTRY}}/{{.DOCKER_REPO}}:{{.tag}}
+    silent: true
+

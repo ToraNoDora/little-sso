@@ -1,0 +1,19 @@
+### ~ Docker ~ ###
+**/.dockerignore
+**/Dockerfile
+
+### ~ Git ~ ###
+**/.git*
+
+### ~ Helm ~ ###
+**/chart
+
+### ~ Make ~ ###
+**/Makefile
+**/Taskfile
+
+# secrets
+**/.env
+
+# dirs
+migrations
