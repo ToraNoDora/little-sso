@@ -45,3 +45,8 @@ $ cd ./sso && \
 	go fmt ./... && \
 	go mod tidy -v
 ```
+
+## Additional Information
+
+> proto files: https://github.com/ToraNoDora/little-sso-protos
+
